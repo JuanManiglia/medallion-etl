@@ -3,8 +3,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, Optional, TypeVar, Callable
 import polars as pl
-from prefect import task as prefect_task
-from prefect.tasks import Task as PrefectTask
+from prefect import task
+from prefect.client.schemas.objects import Task as PrefectTask
 
 from medallion_etl.config import config
 
@@ -51,7 +51,7 @@ class Task(Generic[T, U], ABC):
             task_kwargs.setdefault("retries", config.max_retries)
             task_kwargs.setdefault("retry_delay_seconds", config.retry_delay_seconds)
             
-            @prefect_task(**task_kwargs)
+            @task(**task_kwargs)
             def _task_wrapper(input_data: T, **kwargs) -> U:
                 result = self.run(input_data, **kwargs)
                 return result.data

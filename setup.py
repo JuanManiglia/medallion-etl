@@ -26,7 +26,7 @@ setup(
         "polars>=1.30",
         "pydantic>=2.7",
         "sqlalchemy>=2.0",
-        "prefect>=2.0",
+        "prefect>=3.0",
         "requests>=2.25.0",
     ],
     extras_require={

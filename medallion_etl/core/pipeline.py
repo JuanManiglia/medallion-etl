@@ -1,8 +1,8 @@
 """Definiciones para pipelines en Medallion ETL."""
 
 from typing import List, Optional, Callable, TypeVar, Generic
-from prefect import flow as prefect_flow
-from prefect.flows import Flow as PrefectFlow
+from prefect import flow
+from prefect.client.schemas.objects import Flow as PrefectFlow
 
 from medallion_etl.core.task import Task, TaskResult
 
@@ -53,7 +53,7 @@ class Pipeline(Generic[T, U]):
             flow_kwargs.setdefault("name", self.name)
             flow_kwargs.setdefault("description", self.description)
             
-            @prefect_flow(**flow_kwargs)
+            @flow(**flow_kwargs)
             def _flow_wrapper(input_data: T, **kwargs) -> U:
                 result = self.run(input_data, **kwargs)
                 return result.data
