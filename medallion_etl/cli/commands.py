@@ -30,7 +30,7 @@ def init_project(project_dir="."):
     
     # Crear archivo de configuración
     config_path = project_dir / "config.py"
-    with open(config_path, "w") as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         f.write("# Configuración para el proyecto Medallion ETL.\n\n")
         f.write("import os\n")
         f.write("from pathlib import Path\n")
@@ -49,7 +49,7 @@ def init_project(project_dir="."):
     
     # Crear archivo principal
     main_path = project_dir / "main.py"
-    with open(main_path, "w") as f:
+    with open(main_path, "w", encoding="utf-8") as f:
         f.write("# Script principal para ejecutar pipelines.\n\n")
         f.write("import argparse\n")
         f.write("from pathlib import Path\n\n")
@@ -82,21 +82,21 @@ def init_project(project_dir="."):
     
     # Crear archivo README.md
     readme_path = project_dir / "README.md"
-    with open(readme_path, "w") as f:
+    with open(readme_path, "w", encoding="utf-8") as f:
         f.write("# Proyecto Medallion ETL\n\n")
         f.write("Este proyecto utiliza la librería Medallion ETL para construir pipelines de datos con arquitectura medallion.\n\n")
         f.write("## Estructura del proyecto\n\n")
         f.write("```\n")
         f.write(".\n")
-        f.write("├── config.py           # Configuración del proyecto\n")
-        f.write("├── data/               # Directorio para almacenar datos\n")
-        f.write("│   ├── bronze/         # Datos crudos (raw)\n")
-        f.write("│   ├── silver/         # Datos validados y limpios\n")
-        f.write("│   └── gold/           # Datos transformados y listos para análisis\n")
-        f.write("├── logs/               # Logs del proyecto\n")
-        f.write("├── main.py             # Script principal\n")
-        f.write("├── pipelines/          # Definiciones de pipelines\n")
-        f.write("└── schemas/            # Esquemas de datos (Pydantic)\n")
+        f.write("|- config.py           # Configuración del proyecto\n")
+        f.write("|- data/               # Directorio para almacenar datos\n")
+        f.write("|   |- bronze/         # Datos crudos (raw)\n")
+        f.write("|   |- silver/         # Datos validados y limpios\n")
+        f.write("|   \- gold/           # Datos transformados y listos para análisis\n")
+        f.write("|- logs/               # Logs del proyecto\n")
+        f.write("|- main.py             # Script principal\n")
+        f.write("|- pipelines/          # Definiciones de pipelines\n")
+        f.write("\- schemas/            # Esquemas de datos (Pydantic)\n")
         f.write("```\n\n")
         f.write("## Uso\n\n")
         f.write("### Ejecutar un pipeline\n\n")
@@ -138,7 +138,7 @@ def create_pipeline(name, project_dir=None):
     schema_path = project_dir / "schemas" / f"{name.lower()}_schema.py"
     
     # Escribir el archivo de pipeline
-    with open(pipeline_path, "w") as f:
+    with open(pipeline_path, "w", encoding="utf-8") as f:
         f.write(f"# Pipeline {name}\n\n")
         f.write("from medallion_etl.core import MedallionPipeline\n")
         f.write("from medallion_etl.bronze import CSVExtractor\n")
@@ -192,7 +192,7 @@ def create_pipeline(name, project_dir=None):
         f.write("    return result.metadata\n")
     
     # Escribir el archivo de esquema
-    with open(schema_path, "w") as f:
+    with open(schema_path, "w", encoding="utf-8") as f:
         f.write(f"# Esquema para el pipeline {name}\n\n")
         f.write("from datetime import datetime\n")
         f.write("from typing import Optional\n")
