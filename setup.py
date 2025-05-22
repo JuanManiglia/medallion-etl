@@ -11,7 +11,7 @@ setup(
     description="Una librería modular para construir data pipelines con arquitectura medallion",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/usuario/medallion-etl",
+    url="https://github.com/JuanManiglia/medallion-etl",
     packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -37,4 +37,10 @@ setup(
             "mypy>=1.0.0",
         ],
     },
+    entry_points={
+        "console_scripts": [
+            "medallion-etl=medallion_etl.cli.commands:main",
+        ],
+    },
+    include_package_data=True,
 )
