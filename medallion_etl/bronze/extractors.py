@@ -141,8 +141,6 @@ class ParquetExtractor(FileExtractor):
 
 
 class APIExtractor(Task[Dict[str, Any], pl.DataFrame]):
-    """Extractor para APIs REST."""
-    
     def __init__(
         self,
         name: Optional[str] = None,
@@ -152,68 +150,67 @@ class APIExtractor(Task[Dict[str, Any], pl.DataFrame]):
         method: str = "GET",
         headers: Optional[Dict[str, str]] = None,
         data_key: Optional[str] = None,
+        use_mock: bool = False,              
+        mock_file: Optional[str] = None      
     ):
         super().__init__(name, description)
         self.output_path = output_path or config.bronze_dir
         self.save_raw = save_raw
         self.method = method.upper()
         self.headers = headers or {}
-        self.data_key = data_key  # Clave para extraer datos del JSON
-    
+        self.data_key = data_key
+        self.use_mock = use_mock
+        self.mock_file = mock_file
+
     def run(self, input_data: Dict[str, Any], **kwargs) -> TaskResult[pl.DataFrame]:
-        """Extrae datos de una API REST."""
-        url = input_data.get("url")
-        if not url:
-            raise ValueError("Se requiere una URL en el diccionario de entrada")
-        
-        params = input_data.get("params", {})
-        body = input_data.get("body", {})
-        
-        # Combinar headers
-        headers = {**self.headers, **input_data.get("headers", {})}
-        
-        # Realizar la solicitud
-        response = requests.request(
-            method=self.method,
-            url=url,
-            params=params,
-            json=body if self.method in ["POST", "PUT", "PATCH"] else None,
-            headers=headers
-        )
-        response.raise_for_status()
-        
-        # Procesar la respuesta
-        json_data = response.json()
-        
-        # Guardar datos crudos si es necesario
-        if self.save_raw:
-            file_name = f"{self.name or 'api'}_{url.split('/')[-1]}.json"
-            self.output_path.mkdir(parents=True, exist_ok=True)
-            with open(self.output_path / file_name, "w") as f:
-                json.dump(json_data, f, indent=2)
-        
+        if self.use_mock and self.mock_file:
+            # Usar JSON mockeado
+            with open(self.mock_file, "r") as f:
+                json_data = json.load(f)
+            print(f"🧪 Usando mock data de {self.mock_file}")
+            status_code = 200
+        else:
+            # Lógica normal de llamada a la API
+            url = input_data.get("url")
+            if not url:
+                raise ValueError("Se requiere una URL en el diccionario de entrada")
+            params = input_data.get("params", {})
+            body = input_data.get("body", {})
+            headers = {**self.headers, **input_data.get("headers", {})}
+            response = requests.request(
+                method=self.method,
+                url=url,
+                params=params,
+                json=body if self.method in ["POST", "PUT", "PATCH"] else None,
+                headers=headers
+            )
+            response.raise_for_status()
+            json_data = response.json()
+            status_code = response.status_code
+            # Guardar datos crudos si es necesario
+            if self.save_raw:
+                file_name = f"{self.name or 'api'}_{url.split('/')[-1]}.json"
+                self.output_path.mkdir(parents=True, exist_ok=True)
+                with open(self.output_path / file_name, "w") as f:
+                    json.dump(json_data, f, indent=2)
         # Extraer datos relevantes si se especifica una clave
         if self.data_key:
             data_to_convert = json_data.get(self.data_key, [])
         else:
             data_to_convert = json_data
-        
         # Convertir a DataFrame
         if isinstance(data_to_convert, list):
             df = pl.DataFrame(data_to_convert)
         elif isinstance(data_to_convert, dict):
-            # Si es un diccionario, intentamos convertirlo a un DataFrame de una fila
             df = pl.DataFrame([data_to_convert])
         else:
             raise ValueError(f"No se pueden convertir los datos a DataFrame: {type(data_to_convert)}")
-        
         metadata = {
-            "source": url,
-            "status_code": response.status_code,
+            "source": self.mock_file if self.use_mock else input_data.get("url"),
+            "status_code": status_code,
             "rows": len(df),
             "columns": df.columns,
         }
-        
         return TaskResult(df, metadata)
 
 
