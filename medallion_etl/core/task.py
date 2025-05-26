@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, Optional, TypeVar, Callable
 import polars as pl
 from prefect import task
-from prefect.client.schemas.objects import Task as PrefectTask
 
 from medallion_etl.config import config
 
@@ -32,7 +31,7 @@ class Task(Generic[T, U], ABC):
     def __init__(self, name: Optional[str] = None, description: Optional[str] = None):
         self.name = name or self.__class__.__name__
         self.description = description
-        self._prefect_task: Optional[PrefectTask] = None
+        self._prefect_task: Optional[Any] = None
     
     @abstractmethod
     def run(self, input_data: T, **kwargs) -> TaskResult[U]:

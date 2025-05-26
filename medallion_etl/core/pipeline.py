@@ -1,8 +1,7 @@
 """Definiciones para pipelines en Medallion ETL."""
 
-from typing import List, Optional, Callable, TypeVar, Generic
+from typing import List, Optional, Callable, TypeVar, Generic, Any
 from prefect import flow
-from prefect.client.schemas.objects import Flow as PrefectFlow
 
 from medallion_etl.core.task import Task, TaskResult
 
@@ -18,7 +17,7 @@ class Pipeline(Generic[T, U]):
         self.name = name
         self.description = description
         self.tasks: List[Task] = []
-        self._prefect_flow: Optional[PrefectFlow] = None
+        self._prefect_flow: Optional[Any] = None
     
     def add_task(self, task: Task) -> 'Pipeline':
         """Añade una tarea al pipeline."""
