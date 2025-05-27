@@ -1,6 +1,6 @@
 """Utilidades para Medallion ETL."""
 
-from medallion_etl.utils.logging import setup_logger, logger
+from medallion_etl.utils.logging_utils import setup_logger, logger
 from medallion_etl.utils.helpers import (
     ensure_dir,
     save_dataframe,
