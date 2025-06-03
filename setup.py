@@ -29,6 +29,7 @@ setup(
         "prefect>=3.0",
         "requests>=2.25.0",
         "rich>=14.0.0",
+        "typer>=0.9.0",
     ],
     extras_require={
         "dev": [
