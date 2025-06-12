@@ -231,8 +231,6 @@ class APILoader(Task[pl.DataFrame, Dict]):
         endpoint: str,
         api_base_url: str,
         api_token: Optional[str] = None,
-        batch_size: int = 100,
-        method: str = "POST",
         name: Optional[str] = None,
         description: Optional[str] = None,
     ):
@@ -240,59 +238,77 @@ class APILoader(Task[pl.DataFrame, Dict]):
         self.endpoint = endpoint
         self.api_base_url = api_base_url
         self.api_token = api_token
-        self.batch_size = batch_size
-        self.method = method.upper()
     
     def run(self, input_data: pl.DataFrame, **kwargs) -> TaskResult[Dict]:
-        """Carga un DataFrame a través de API en lotes."""
-        # Convertir DataFrame a lista de diccionarios
-        records = input_data.to_dicts()
+        """Carga un DataFrame a través de API enviando archivo parquet."""
+        import tempfile
+        import os
+        
+        # URL completa para insert
+        url = f"{self.api_base_url}/{self.endpoint}/insert"
         
         # Headers para la API
-        headers = {"Content-Type": "application/json"}
+        headers = {}
         if self.api_token:
             headers["Authorization"] = f"Bearer {self.api_token}"
         
-        # URL completa
-        url = f"{self.api_base_url}/{self.endpoint}"
-        
-        # Procesar en lotes
-        total_records = len(records)
-        loaded_count = 0
-        errors = []
-        
-        for i in range(0, total_records, self.batch_size):
-            batch = records[i:i + self.batch_size]
+        try:
+            # Crear archivo temporal parquet
+            with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as temp_file:
+                temp_path = temp_file.name
+                input_data.write_parquet(temp_path)
             
-            try:
-                response = requests.request(
-                    method=self.method,
-                    url=url,
+            # Preparar archivo para multipart/form-data
+            with open(temp_path, 'rb') as file:
+                files = {'file': (f"{self.endpoint}_data.parquet", file, 'application/octet-stream')}
+                
+                response = requests.post(
+                    url,
                     headers=headers,
-                    json={"data": batch},
-                    timeout=30
+                    files=files,
+                    timeout=60
                 )
                 response.raise_for_status()
-                loaded_count += len(batch)
-                logger.info(f"✅ Lote {i//self.batch_size + 1} cargado: {len(batch)} registros")
-                
-            except requests.exceptions.RequestException as e:
-                error_msg = f"Error en lote {i//self.batch_size + 1}: {e}"
-                errors.append(error_msg)
-                logger.error(f"❌ {error_msg}")
-        
-        result = {
-            "total_records": total_records,
-            "loaded_count": loaded_count,
-            "errors": errors,
-            "success_rate": loaded_count / total_records if total_records > 0 else 0
-        }
+            
+            # Limpiar archivo temporal
+            os.unlink(temp_path)
+            
+            # Procesar respuesta
+            total_records = len(input_data)
+            result = {
+                "total_records": total_records,
+                "loaded_count": total_records,
+                "errors": [],
+                "success_rate": 1.0,
+                "response_status": response.status_code
+            }
+            
+            logger.info(f"✅ {self.endpoint} cargado exitosamente: {total_records} registros")
+            
+        except requests.exceptions.RequestException as e:
+            # Limpiar archivo temporal en caso de error
+            if 'temp_path' in locals():
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
+            
+            error_msg = f"Error cargando a API: {e}"
+            logger.error(f"❌ {error_msg}")
+            
+            result = {
+                "total_records": len(input_data),
+                "loaded_count": 0,
+                "errors": [error_msg],
+                "success_rate": 0.0,
+                "response_status": getattr(e.response, 'status_code', None) if hasattr(e, 'response') else None
+            }
         
         metadata = {
             "endpoint": self.endpoint,
             "url": url,
-            "method": self.method,
-            "batch_size": self.batch_size,
+            "method": "POST",
+            "content_type": "multipart/form-data",
             **result
         }
         
