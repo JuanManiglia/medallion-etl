@@ -5,7 +5,8 @@ from medallion_etl.bronze.extractors import (
     CSVExtractor,
     ParquetExtractor,
     APIExtractor,
-    SQLExtractor
+    SQLExtractor,
+    ExcelExtractor
 )
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "CSVExtractor",
     "ParquetExtractor",
     "APIExtractor",
-    "SQLExtractor"
+    "SQLExtractor",
+    "ExcelExtractor"
 ]

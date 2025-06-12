@@ -273,3 +273,48 @@ class SQLExtractor(Task[Dict[str, Any], pl.DataFrame]):
         }
         
         return TaskResult(df, metadata)
+
+
+class ExcelExtractor(FileExtractor):
+    """Extractor para archivos Excel (.xlsx, .xls)."""
+    
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        output_path: Optional[Path] = None,
+        save_raw: bool = True,
+        sheet_name: Union[str, int, None] = 0,  # Hoja a leer
+        **excel_options
+    ):
+        super().__init__(name, description, output_path, save_raw)
+        self.sheet_name = sheet_name
+        self.excel_options = excel_options
+    
+    def run(self, input_data: str, **kwargs) -> TaskResult[pl.DataFrame]:
+        """Extrae datos de un archivo Excel."""
+        import pandas as pd
+        
+        # Leer Excel con pandas
+        df_pandas = pd.read_excel(
+            input_data, 
+            sheet_name=self.sheet_name,
+            **self.excel_options
+        )
+        
+        # Convertir a Polars
+        df = pl.from_pandas(df_pandas)
+        
+        # Guardar como CSV si save_raw está habilitado
+        if self.save_raw:
+            csv_filename = Path(input_data).stem + ".csv"
+            self.save_raw_data(csv_filename, df.write_csv())
+        
+        metadata = {
+            "source": input_data,
+            "rows": len(df),
+            "columns": df.columns,
+            "sheet_name": self.sheet_name
+        }
+        
+        return TaskResult(df, metadata)
