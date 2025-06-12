@@ -3,10 +3,13 @@
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Callable
 import polars as pl
+import requests
+import json
 from sqlalchemy import create_engine
 
 from medallion_etl.core import Task, DataFrameTask, TaskResult
 from medallion_etl.config import config
+from medallion_etl.utils import logger
 
 
 class Aggregator(DataFrameTask):
@@ -218,3 +221,79 @@ class SQLLoader(Task[pl.DataFrame, bool]):
         }
         
         return TaskResult(True, metadata)
+
+
+class APILoader(Task[pl.DataFrame, Dict]):
+    """Cargador de datos a través de API para la capa Gold."""
+    
+    def __init__(
+        self,
+        endpoint: str,
+        api_base_url: str,
+        api_token: Optional[str] = None,
+        batch_size: int = 100,
+        method: str = "POST",
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+    ):
+        super().__init__(name or f"APILoader_{endpoint}", description)
+        self.endpoint = endpoint
+        self.api_base_url = api_base_url
+        self.api_token = api_token
+        self.batch_size = batch_size
+        self.method = method.upper()
+    
+    def run(self, input_data: pl.DataFrame, **kwargs) -> TaskResult[Dict]:
+        """Carga un DataFrame a través de API en lotes."""
+        # Convertir DataFrame a lista de diccionarios
+        records = input_data.to_dicts()
+        
+        # Headers para la API
+        headers = {"Content-Type": "application/json"}
+        if self.api_token:
+            headers["Authorization"] = f"Bearer {self.api_token}"
+        
+        # URL completa
+        url = f"{self.api_base_url}/{self.endpoint}"
+        
+        # Procesar en lotes
+        total_records = len(records)
+        loaded_count = 0
+        errors = []
+        
+        for i in range(0, total_records, self.batch_size):
+            batch = records[i:i + self.batch_size]
+            
+            try:
+                response = requests.request(
+                    method=self.method,
+                    url=url,
+                    headers=headers,
+                    json={"data": batch},
+                    timeout=30
+                )
+                response.raise_for_status()
+                loaded_count += len(batch)
+                logger.info(f"✅ Lote {i//self.batch_size + 1} cargado: {len(batch)} registros")
+                
+            except requests.exceptions.RequestException as e:
+                error_msg = f"Error en lote {i//self.batch_size + 1}: {e}"
+                errors.append(error_msg)
+                logger.error(f"❌ {error_msg}")
+        
+        result = {
+            "total_records": total_records,
+            "loaded_count": loaded_count,
+            "errors": errors,
+            "success_rate": loaded_count / total_records if total_records > 0 else 0
+        }
+        
+        metadata = {
+            "endpoint": self.endpoint,
+            "url": url,
+            "method": self.method,
+            "batch_size": self.batch_size,
+            **result
+        }
+        
+        return TaskResult(result, metadata)
