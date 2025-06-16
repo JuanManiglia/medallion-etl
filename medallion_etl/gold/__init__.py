@@ -4,12 +4,14 @@ from medallion_etl.gold.transformers import (
     Aggregator,
     Joiner,
     Partitioner,
-    SQLLoader
+    SQLLoader,
+    APILoader
 )
 
 __all__ = [
     "Aggregator",
     "Joiner",
     "Partitioner",
-    "SQLLoader"
+    "SQLLoader",
+    "APILoader"
 ]
