@@ -284,8 +284,8 @@ class ExcelExtractor(Task[str, pl.DataFrame]):
         description: Optional[str] = None,
         output_path: Optional[Path] = None,
         save_raw: bool = True,
-        sheet_name: Union[str, int, None] = "Hoja1",  # Usar "Hoja1" por defecto
-        engine: str = "calamine",
+        sheet_name: Union[str, int, None] = None,  # CAMBIO: usar None por defecto
+        engine: str = "xlsx2csv",  # CAMBIO: usar xlsx2csv que funciona con sheet_name=None
         infer_schema_length: Optional[int] = 1000,
         **polars_options
     ):
@@ -304,29 +304,29 @@ class ExcelExtractor(Task[str, pl.DataFrame]):
         
         # Configuraciones ordenadas por probabilidad de éxito
         configs = [
-            # Configuración principal: calamine + Hoja1
+            # Configuración principal: xlsx2csv + sheet_name=None (FUNCIONA según diagnóstico)
             {
-                "engine": "calamine",
-                "sheet_name": "Hoja1",
-                "description": "🚀 Calamine + Hoja1"
-            },
-            # Fallback 1: openpyxl + Hoja1  
-            {
-                "engine": "openpyxl", 
-                "sheet_name": "Hoja1",
-                "description": "🐍 OpenPyXL + Hoja1"
-            },
-            # Fallback 2: calamine sin sheet_name específico
-            {
-                "engine": "calamine",
+                "engine": "xlsx2csv",
                 "sheet_name": None,
-                "description": "🚀 Calamine + auto"
+                "description": "📄 xlsx2csv + sheet_name=None"
             },
-            # Fallback 3: openpyxl sin sheet_name específico
+            # Fallback 1: calamine + sheet_name=None
+            {
+                "engine": "calamine", 
+                "sheet_name": None,
+                "description": "🚀 calamine + sheet_name=None"
+            },
+            # Fallback 2: openpyxl + sheet_name=None
             {
                 "engine": "openpyxl",
-                "sheet_name": None, 
-                "description": "🐍 OpenPyXL + auto"
+                "sheet_name": None,
+                "description": "🐍 openpyxl + sheet_name=None"
+            },
+            # Fallback 3: intentar con Hoja1 específica (puede fallar)
+            {
+                "engine": "xlsx2csv",
+                "sheet_name": "Hoja1", 
+                "description": "📄 xlsx2csv + Hoja1"
             }
         ]
         
