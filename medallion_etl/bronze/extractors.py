@@ -275,8 +275,9 @@ class SQLExtractor(Task[Dict[str, Any], pl.DataFrame]):
         return TaskResult(df, metadata)
 
 
-class ExcelExtractor(FileExtractor):
-    """Extractor para archivos Excel (.xlsx, .xls)."""
+# 🚀 NUEVO: ExcelExtractor usando solo Polars nativo (sin pandas)
+class ExcelExtractor(Task[str, pl.DataFrame]):
+    """Extractor para archivos Excel usando Polars nativo - SIN PANDAS."""
     
     def __init__(
         self,
@@ -284,37 +285,197 @@ class ExcelExtractor(FileExtractor):
         description: Optional[str] = None,
         output_path: Optional[Path] = None,
         save_raw: bool = True,
-        sheet_name: Union[str, int, None] = 0,  # Hoja a leer
-        **excel_options
+        sheet_name: Union[str, int, None] = 0,
+        engine: str = "calamine",  # "calamine", "xlsx2csv", "openpyxl"
+        infer_schema_length: Optional[int] = 1000,
+        **polars_options
     ):
-        super().__init__(name, description, output_path, save_raw)
+        super().__init__(name, description)
+        self.output_path = output_path or config.bronze_dir
+        self.save_raw = save_raw
         self.sheet_name = sheet_name
-        self.excel_options = excel_options
+        self.engine = engine
+        self.infer_schema_length = infer_schema_length
+        self.polars_options = polars_options
     
     def run(self, input_data: str, **kwargs) -> TaskResult[pl.DataFrame]:
-        """Extrae datos de un archivo Excel."""
-        import pandas as pd
+        """Extrae datos de un archivo Excel usando Polars nativo."""
         
-        # Leer Excel con pandas
-        df_pandas = pd.read_excel(
-            input_data, 
-            sheet_name=self.sheet_name,
-            **self.excel_options
-        )
+        # Estrategias ordenadas por preferencia (velocidad y confiabilidad)
+        strategies = [
+            ("calamine", "🚀 Motor rápido Calamine (Rust)"),
+            ("xlsx2csv", "📄 Conversión via CSV"),
+            ("openpyxl", "🐍 Motor Python openpyxl"),
+        ]
         
-        # Convertir a Polars
-        df = pl.from_pandas(df_pandas)
+        df = None
+        last_error = None
+        used_engine = self.engine
         
-        # Guardar como CSV si save_raw está habilitado
+        # Si se especifica un motor específico, intentar solo ese
+        if self.engine in [s[0] for s in strategies]:
+            strategies = [(self.engine, f"🎯 Motor específico: {self.engine}")]
+        
+        for engine, description in strategies:
+            try:
+                print(f"{description}...")
+                
+                # Configuración específica por motor
+                read_options = self._get_engine_options(engine)
+                
+                df = pl.read_excel(
+                    source=input_data,
+                    sheet_name=self.sheet_name,
+                    engine=engine,
+                    infer_schema_length=self.infer_schema_length,
+                    **read_options,
+                    **self.polars_options
+                )
+                
+                print(f"✅ Éxito con {engine}")
+                used_engine = engine
+                break
+                
+            except Exception as e:
+                print(f"❌ Falló {engine}: {str(e)[:100]}...")
+                last_error = e
+                continue
+        
+        if df is None:
+            raise ValueError(f"No se pudo leer el archivo Excel con ningún motor. Último error: {last_error}")
+        
+        # Post-procesamiento para limpiar datos
+        df = self._clean_dataframe(df)
+        
+        # Guardar datos crudos como CSV si está habilitado
         if self.save_raw:
             csv_filename = Path(input_data).stem + ".csv"
-            self.save_raw_data(csv_filename, df.write_csv())
+            csv_content = df.write_csv()
+            self.save_raw_data(csv_filename, csv_content)
         
         metadata = {
             "source": input_data,
             "rows": len(df),
             "columns": df.columns,
-            "sheet_name": self.sheet_name
+            "sheet_name": self.sheet_name,
+            "successful_engine": used_engine
+        }
+        
+        return TaskResult(df, metadata)
+    
+    def _get_engine_options(self, engine: str) -> dict:
+        """Obtiene opciones específicas por motor."""
+        if engine == "calamine":
+            return {
+                "read_options": {
+                    "header_row": 0,  # Fila de headers
+                    "skip_rows": 0,   # Filas a saltar
+                }
+            }
+        elif engine == "xlsx2csv":
+            return {
+                "read_options": {
+                    "has_header": True,
+                    "skip_rows": 0,
+                    "ignore_errors": True,  # Ignorar errores de parsing
+                }
+            }
+        elif engine == "openpyxl":
+            return {
+                "read_options": {
+                    "header_row": 0,
+                }
+            }
+        else:
+            return {}
+    
+    def _clean_dataframe(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Limpia el DataFrame después de la extracción."""
+        # Remover filas completamente vacías
+        df = df.filter(
+            pl.fold(
+                acc=False,
+                function=lambda acc, x: acc | x.is_not_null(),
+                exprs=pl.all()
+            )
+        )
+        
+        # Limpiar nombres de columnas
+        df = df.rename({
+            col: str(col).strip().replace(' ', '_').replace('\n', '').replace('\t', '')
+            for col in df.columns
+        })
+        
+        return df
+    
+    def save_raw_data(self, file_name: str, data: str) -> Path:
+        """Guarda datos crudos como CSV."""
+        output_file = self.output_path / file_name
+        self.output_path.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_file, "w", encoding='utf-8') as f:
+            f.write(data)
+        
+        return output_file
+
+
+class JSONExtractor(FileExtractor):
+    """Extractor para archivos JSON."""
+    
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        output_path: Optional[Path] = None,
+        save_raw: bool = True,
+        data_key: Optional[str] = None,  # Clave específica en el JSON
+        **json_options
+    ):
+        super().__init__(name, description, output_path, save_raw)
+        self.data_key = data_key
+        self.json_options = json_options
+    
+    def run(self, input_data: str, **kwargs) -> TaskResult[pl.DataFrame]:
+        """Extrae datos de un archivo JSON."""
+        is_url = input_data.startswith("http")
+        
+        if is_url:
+            response = requests.get(input_data)
+            response.raise_for_status()
+            json_data = response.json()
+            
+            if self.save_raw:
+                file_name = input_data.split("/")[-1]
+                if not file_name.endswith(".json"):
+                    file_name = f"download_{file_name}.json"
+                self.save_raw_data(file_name, json_data)
+        else:
+            # Es una ruta de archivo local
+            with open(input_data, 'r', encoding='utf-8') as f:
+                json_data = json.load(f)
+            
+            if self.save_raw and Path(input_data) != self.output_path:
+                self.save_raw_data(Path(input_data).name, json_data)
+        
+        # Extraer datos específicos si se proporciona data_key
+        if self.data_key:
+            data_to_convert = json_data.get(self.data_key, [])
+        else:
+            data_to_convert = json_data
+        
+        # Convertir a DataFrame
+        if isinstance(data_to_convert, list):
+            df = pl.DataFrame(data_to_convert) if data_to_convert else pl.DataFrame()
+        elif isinstance(data_to_convert, dict):
+            df = pl.DataFrame([data_to_convert])
+        else:
+            raise ValueError(f"No se pueden convertir los datos JSON a DataFrame: {type(data_to_convert)}")
+        
+        metadata = {
+            "source": input_data,
+            "rows": len(df),
+            "columns": df.columns,
+            "data_key": self.data_key
         }
         
         return TaskResult(df, metadata)
