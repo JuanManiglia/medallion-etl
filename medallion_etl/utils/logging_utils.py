@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Optional
 
 from medallion_etl.config import config
-
 from rich.logging import RichHandler
+from rich.console import Console
 
 def setup_logger(name: str, level: Optional[str] = None, log_file: Optional[Path] = None) -> logging.Logger:
     """
@@ -22,6 +22,7 @@ def setup_logger(name: str, level: Optional[str] = None, log_file: Optional[Path
     logger.handlers.clear()
 
     # Handler de consola con RichHandler
+    # Removed 'stream' parameter as it's not supported in newer versions of rich
     console_handler = RichHandler(
         level=log_level,
         show_time=True,          # Timestamp estilo Prefect
@@ -30,8 +31,7 @@ def setup_logger(name: str, level: Optional[str] = None, log_file: Optional[Path
         rich_tracebacks=True,    # Stacktrace bonito si hay error
         markup=False,            # No hace falta markup en mensajes
         omit_repeated_times=False,
-        console=None,
-        stream=sys.stdout  
+        console=Console(file=sys.stdout)  # Use Console instead of stream
     )
     logger.addHandler(console_handler)
 
