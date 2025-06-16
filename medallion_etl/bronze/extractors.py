@@ -275,9 +275,8 @@ class SQLExtractor(Task[Dict[str, Any], pl.DataFrame]):
         return TaskResult(df, metadata)
 
 
-# 🚀 NUEVO: ExcelExtractor usando solo Polars nativo (sin pandas)
 class ExcelExtractor(Task[str, pl.DataFrame]):
-    """Extractor para archivos Excel usando Polars nativo - SIN PANDAS."""
+    """Extractor Excel corregido basado en diagnóstico."""
     
     def __init__(
         self,
@@ -285,8 +284,8 @@ class ExcelExtractor(Task[str, pl.DataFrame]):
         description: Optional[str] = None,
         output_path: Optional[Path] = None,
         save_raw: bool = True,
-        sheet_name: Union[str, int, None] = 0,
-        engine: str = "calamine",  # "calamine", "xlsx2csv", "openpyxl"
+        sheet_name: Union[str, int, None] = "Hoja1",  # Usar "Hoja1" por defecto
+        engine: str = "calamine",
         infer_schema_length: Optional[int] = 1000,
         **polars_options
     ):
@@ -299,55 +298,84 @@ class ExcelExtractor(Task[str, pl.DataFrame]):
         self.polars_options = polars_options
     
     def run(self, input_data: str, **kwargs) -> TaskResult[pl.DataFrame]:
-        """Extrae datos de un archivo Excel usando Polars nativo."""
+        """Extrae datos usando configuración corregida."""
         
-        # Estrategias ordenadas por preferencia (velocidad y confiabilidad)
-        strategies = [
-            ("calamine", "🚀 Motor rápido Calamine (Rust)"),
-            ("xlsx2csv", "📄 Conversión via CSV"),
-            ("openpyxl", "🐍 Motor Python openpyxl"),
+        print(f"📄 Procesando: {Path(input_data).name}")
+        
+        # Configuraciones ordenadas por probabilidad de éxito
+        configs = [
+            # Configuración principal: calamine + Hoja1
+            {
+                "engine": "calamine",
+                "sheet_name": "Hoja1",
+                "description": "🚀 Calamine + Hoja1"
+            },
+            # Fallback 1: openpyxl + Hoja1  
+            {
+                "engine": "openpyxl", 
+                "sheet_name": "Hoja1",
+                "description": "🐍 OpenPyXL + Hoja1"
+            },
+            # Fallback 2: calamine sin sheet_name específico
+            {
+                "engine": "calamine",
+                "sheet_name": None,
+                "description": "🚀 Calamine + auto"
+            },
+            # Fallback 3: openpyxl sin sheet_name específico
+            {
+                "engine": "openpyxl",
+                "sheet_name": None, 
+                "description": "🐍 OpenPyXL + auto"
+            }
         ]
         
         df = None
-        last_error = None
-        used_engine = self.engine
+        successful_config = None
         
-        # Si se especifica un motor específico, intentar solo ese
-        if self.engine in [s[0] for s in strategies]:
-            strategies = [(self.engine, f"🎯 Motor específico: {self.engine}")]
-        
-        for engine, description in strategies:
+        for config in configs:
             try:
-                print(f"{description}...")
+                print(f"  {config['description']}...", end="")
                 
-                # Configuración específica por motor
-                read_options = self._get_engine_options(engine)
+                # Preparar parámetros - ELIMINAR dtypes problemático
+                read_params = {
+                    "source": input_data,
+                    "engine": config["engine"],
+                    "infer_schema_length": self.infer_schema_length
+                }
                 
-                df = pl.read_excel(
-                    source=input_data,
-                    sheet_name=self.sheet_name,
-                    engine=engine,
-                    infer_schema_length=self.infer_schema_length,
-                    **read_options,
-                    **self.polars_options
-                )
+                # Solo agregar sheet_name si no es None
+                if config["sheet_name"] is not None:
+                    read_params["sheet_name"] = config["sheet_name"]
                 
-                print(f"✅ Éxito con {engine}")
-                used_engine = engine
+                # NO pasar polars_options que pueden causar el error de dtypes
+                # Solo pasar parámetros seguros
+                safe_options = {}
+                for key, value in self.polars_options.items():
+                    if key not in ['dtypes', 'schema_overrides']:  # Evitar parámetros problemáticos
+                        safe_options[key] = value
+                
+                read_params.update(safe_options)
+                
+                # Leer Excel
+                df = pl.read_excel(**read_params)
+                
+                print(f" ✅ ({len(df)} filas, {len(df.columns)} cols)")
+                successful_config = config
                 break
                 
             except Exception as e:
-                print(f"❌ Falló {engine}: {str(e)[:100]}...")
-                last_error = e
+                error_msg = str(e)[:50]
+                print(f" ❌ ({error_msg}...)")
                 continue
         
         if df is None:
-            raise ValueError(f"No se pudo leer el archivo Excel con ningún motor. Último error: {last_error}")
+            raise ValueError(f"No se pudo leer {input_data} con ninguna configuración")
         
-        # Post-procesamiento para limpiar datos
+        # Post-procesamiento
         df = self._clean_dataframe(df)
         
-        # Guardar datos crudos como CSV si está habilitado
+        # Guardar datos crudos
         if self.save_raw:
             csv_filename = Path(input_data).stem + ".csv"
             csv_content = df.write_csv()
@@ -357,54 +385,37 @@ class ExcelExtractor(Task[str, pl.DataFrame]):
             "source": input_data,
             "rows": len(df),
             "columns": df.columns,
-            "sheet_name": self.sheet_name,
-            "successful_engine": used_engine
+            "successful_config": successful_config
         }
         
         return TaskResult(df, metadata)
     
-    def _get_engine_options(self, engine: str) -> dict:
-        """Obtiene opciones específicas por motor."""
-        if engine == "calamine":
-            return {
-                "read_options": {
-                    "header_row": 0,  # Fila de headers
-                    "skip_rows": 0,   # Filas a saltar
-                }
-            }
-        elif engine == "xlsx2csv":
-            return {
-                "read_options": {
-                    "has_header": True,
-                    "skip_rows": 0,
-                    "ignore_errors": True,  # Ignorar errores de parsing
-                }
-            }
-        elif engine == "openpyxl":
-            return {
-                "read_options": {
-                    "header_row": 0,
-                }
-            }
-        else:
-            return {}
-    
     def _clean_dataframe(self, df: pl.DataFrame) -> pl.DataFrame:
-        """Limpia el DataFrame después de la extracción."""
-        # Remover filas completamente vacías
-        df = df.filter(
-            pl.fold(
-                acc=False,
-                function=lambda acc, x: acc | x.is_not_null(),
-                exprs=pl.all()
+        """Limpia el DataFrame."""
+        
+        # Filtrar filas completamente vacías
+        if len(df) > 0:
+            df = df.filter(
+                pl.fold(
+                    acc=False,
+                    function=lambda acc, x: acc | x.is_not_null(),
+                    exprs=pl.all()
+                )
             )
-        )
         
         # Limpiar nombres de columnas
-        df = df.rename({
-            col: str(col).strip().replace(' ', '_').replace('\n', '').replace('\t', '')
-            for col in df.columns
-        })
+        clean_columns = {}
+        for col in df.columns:
+            clean_name = (str(col).strip()
+                         .replace(' ', '_')
+                         .replace('\n', '')
+                         .replace('\t', '')
+                         .replace('(', '')
+                         .replace(')', ''))
+            clean_columns[col] = clean_name
+        
+        if clean_columns:
+            df = df.rename(clean_columns)
         
         return df
     
