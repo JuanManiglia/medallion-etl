@@ -1,5 +1,6 @@
 """Utilidades de logging para Medallion ETL, estilo Prefect."""
 
+import sys
 import logging
 from pathlib import Path
 from typing import Optional
@@ -28,14 +29,16 @@ def setup_logger(name: str, level: Optional[str] = None, log_file: Optional[Path
         show_path=False,         # Sin path de archivo
         rich_tracebacks=True,    # Stacktrace bonito si hay error
         markup=False,            # No hace falta markup en mensajes
-        omit_repeated_times=False
+        omit_repeated_times=False,
+        console=None,
+        stream=sys.stdout  
     )
     logger.addHandler(console_handler)
 
     # Handler de archivo (opcional)
     if log_file is not None:
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(log_file)
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setLevel(log_level)
         file_formatter = logging.Formatter('%(asctime)s | %(name)s | %(levelname)s | %(message)s')
         file_handler.setFormatter(file_formatter)

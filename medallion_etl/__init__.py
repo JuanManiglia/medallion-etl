@@ -1,6 +1,6 @@
 """Medallion ETL: Una librería modular para construir data pipelines con arquitectura medallion."""
 
-__version__ = "0.1.22"
+__version__ = "0.1.23"
 
 # Importaciones principales para facilitar el uso de la librería
 from medallion_etl.core.pipeline import Pipeline  # noqa: F401

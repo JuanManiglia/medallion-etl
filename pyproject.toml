@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "medallion-etl"
-version = "0.1.22"
+version = "0.1.23"
 description = "Una librería modular para construir data pipelines con arquitectura medallion"
 readme = "README.md"
 requires-python = ">=3.11"
