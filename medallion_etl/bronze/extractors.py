@@ -337,9 +337,9 @@ class APIExtractor(Task[Dict[str, Any], pl.DataFrame]):
         
         # Convertir a DataFrame
         if isinstance(data_to_convert, list):
-            df = pl.DataFrame(data_to_convert) if data_to_convert else pl.DataFrame()
+            df = pl.DataFrame(data_to_convert, strict = False) if data_to_convert else pl.DataFrame()
         elif isinstance(data_to_convert, dict):
-            df = pl.DataFrame([data_to_convert])
+            df = pl.DataFrame([data_to_convert], strict = False)
         else:
             raise ValueError(f"No se pueden convertir los datos a DataFrame: {type(data_to_convert)}")
         
